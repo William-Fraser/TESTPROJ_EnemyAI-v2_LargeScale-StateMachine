@@ -5,6 +5,17 @@ using UnityEngine.AI;
 
 public class navMeshCharacterNavigation : MonoBehaviour
 {
+    private enum STATE
+    {
+        IDLE,
+        PATROLLING, // to Chasing, from Returning  /                   (set up patrol in square fashion with obstacles between points)
+        CHASING,    // to Attacking or Searching, from Patrolling  /    (situational)
+        SEARCHING,  // to Chasing or Returning, from Chasing /         (situational)
+        ATTACKING,  // to Chasing, from Chasing /                       (used to stop/attack)
+        RETURNING,  // to Patrolling from Searching             
+        COWERING,
+        RETREATING
+    }
 
     //known bugs, chasing state activate but doesn't reset searching timer, works if mesh is chasing on time of coroutine end
 
@@ -18,8 +29,13 @@ public class navMeshCharacterNavigation : MonoBehaviour
     //field for Chasing
     [Header("Chase Target")]
     [Space(10)]
-    [Tooltip("chaseObject Requires a tag to be recongnized properly \n(script uses tag of chaseObject for Collision)")]
-    public GameObject chaseObject;
+    public WhiteList[] whiteList;
+
+    // fields for Attacking
+    [Header("Attacking Fields")]
+    [Space(10)]
+    public float attackSpeed = 2.5f;
+    public float attackDamage = 5;
 
     // fields for Patrol
     [Header("Patrolling Stations")]
@@ -32,7 +48,7 @@ public class navMeshCharacterNavigation : MonoBehaviour
     public GameObject station3;
     public GameObject station4;
 
-    // fields for StateMachine
+    // fields for StateMaterials
     [Header("State Materials")]
     [Space(10)]
     [Tooltip("Agent Object is used to change state colour of Character")]
@@ -45,25 +61,23 @@ public class navMeshCharacterNavigation : MonoBehaviour
     public Material retreating;
 
     // private fields
-    private Material displayState; // state of display / part of statemachine 
+    private GameObject targetObject;
+    private STATE _state = STATE.PATROLLING;// enum for states / part of statemachine
+    private Material stateDisplaying; // state of display / part of statemachine 
     // fields for Searching
     private Vector3 lastSeen; 
     private Vector3 lastBeen;
     private bool startSearchOnce = true;
-    //
-    private STATE _state = STATE.PATROLLING;// enum for states / part of statemachine
-    private enum STATE
-    {
-        PATROLLING, // to Chasing, from Retreating  /                   (set up patrol in square fashion with obstacles between points)
-        CHASING,    // to Attacking or Searching, from Patrolling  /    (situational)
-        SEARCHING,  // to Chasing or Retreating, from Chasing /         (situational)
-        ATTACKING,  // to Chasing, from Chasing /                       (used to stop (attack) and move back a bit after)
-        RETREATING  // returns to Patrolling from Searching             
-    }
+    // fields for attacking
+    private bool attackReadyTo;
+    
+    [HideInInspector]
+    public GameObject TargetObject { set { targetObject = value; } }
+
     void Start()
     {
         //init colour of character
-        agentObject.GetComponent<MeshRenderer>().material = displayState;
+        agentObject.GetComponent<MeshRenderer>().material = stateDisplaying;
 
         //init searching values
         lastSeen = this.transform.position;
@@ -72,7 +86,7 @@ public class navMeshCharacterNavigation : MonoBehaviour
     void Update()
     {
         Debug.Log("current state: "+_state); //check state                                      // DEBUG
-        agentObject.GetComponent<MeshRenderer>().material = displayState; //set colour
+        agentObject.GetComponent<MeshRenderer>().material = stateDisplaying; //set colour
         
         // state Machine
         switch (_state)
@@ -81,7 +95,7 @@ public class navMeshCharacterNavigation : MonoBehaviour
                 // moves character to one Station then sets the destination 
                 // for the next Station Number
                 /// Station 4 sets destination to 1
-                displayState = patrolling;
+                stateDisplaying = patrolling;
                 if (patrolToStation == 1)
                 {
                     agent.SetDestination(station1.transform.position);
@@ -116,22 +130,22 @@ public class navMeshCharacterNavigation : MonoBehaviour
                 }
                 break;
 
-            case STATE.CHASING:
+            case STATE.CHASING:                                
                 // targets chase object within the radius and follows them 
                 // until they get close enough to attack or lose object from radius
-                displayState = chasing;
-                agent.SetDestination(chaseObject.transform.position);
+                stateDisplaying = chasing;
+                agent.SetDestination(targetObject.transform.position);
                 break;
 
             case STATE.SEARCHING:
                 // moves character to last place chase object was seen and waits
-                displayState = searching;
+                stateDisplaying = searching;
                 agent.SetDestination(lastSeen);
+                StartCoroutine(SearchTime());
                 if (Vector3.Distance(lastSeen, agent.transform.position) < 5)
                 {
                     if (startSearchOnce)
                     {
-                        StartCoroutine(SearchTime());
                         startSearchOnce = false;
                     }
                 }
@@ -141,13 +155,19 @@ public class navMeshCharacterNavigation : MonoBehaviour
                 // not really handled yet since it can be coded to do multiple actions / stops from NavMesh
                 // the most common one would be to remove health from the player
                 /// if Character attacks chase object and removes health, Character should only attack chase object once
-                displayState = attacking;
+                if (attackReadyTo)
+                {
+                    attackReadyTo = false;
+                    StartCoroutine(GetReadyToAttack());
+                    Attack();
+                }
+                stateDisplaying = attacking;
                 break;
 
-            case STATE.RETREATING:
+            case STATE.RETURNING:
                 // after Searching wait ends and Character returns to patrol path 
                 // at the last place it was patrolling
-                displayState = retreating;
+                stateDisplaying = retreating;
                 agent.SetDestination(lastBeen);
                 if (Vector3.Distance(lastBeen, agent.transform.position) < 5)
                 {
@@ -160,22 +180,27 @@ public class navMeshCharacterNavigation : MonoBehaviour
     // set state to Chasing
     private void OnTriggerEnter(Collider other)
     {
-        if (other.tag == chaseObject.tag)
-        {
-            if (_state == STATE.PATROLLING)
-            {
-                lastBeen = this.transform.position;
+        for (int i = 0; i < whiteList.Length; i++)
+        { 
+            if (whiteList[i].Tag.Contains(other.tag))
+            { 
+                targetObject = other.gameObject;
+                _state = STATE.CHASING;
             }
-            _state = STATE.CHASING;
+        }
+
+        if (_state == STATE.PATROLLING) // then save potsition for return state
+        {
+            lastBeen = this.transform.position;
         }
     }
 
     // set state to Searching
     private void OnTriggerExit(Collider other)
     {
-        if (other.tag == chaseObject.tag)
+        if (other.tag == targetObject.tag) // 
         {
-            lastSeen = chaseObject.transform.position;
+            lastSeen = targetObject.transform.position;
             _state = STATE.SEARCHING;
         }
     }
@@ -183,9 +208,9 @@ public class navMeshCharacterNavigation : MonoBehaviour
     // set state to Attacking
     private void OnTriggerStay(Collider other)
     {
-        if (other.tag == chaseObject.tag)
+        if (other.tag == targetObject.tag)
         {
-            if (Vector3.Distance(chaseObject.transform.position, agent.transform.position) < 3)
+            if (Vector3.Distance(targetObject.transform.position, agent.transform.position) < 3)
             {
                 _state = STATE.ATTACKING;
             }
@@ -196,13 +221,38 @@ public class navMeshCharacterNavigation : MonoBehaviour
         }
     }
 
-    // set state to Retreating / time Character waits before Retreating
+    private void Attack()
+    {
+        // reduce targets HP>? for now call aggrovate
+        Aggrovate();
+    }
+
+    private void Aggrovate()
+    {
+        if (targetObject.GetComponent<navMeshCharacterNavigation>())
+        {
+            targetObject.GetComponent<navMeshCharacterNavigation>().TargetObject = this.gameObject;
+        }
+    }
+
+    IEnumerator GetReadyToAttack()
+    {
+        yield return new WaitForSeconds(attackSpeed);
+        attackReadyTo = true;
+    }
+
+    // set state to Return / time Character waits before Retreating
     IEnumerator SearchTime()
     {
-        yield return new WaitForSeconds(5);
+        yield return new WaitForSeconds(10);
         if (_state == STATE.CHASING) yield break;
-        _state = STATE.RETREATING;
+        _state = STATE.RETURNING;
         startSearchOnce = true;
     }
+}
+[System.Serializable]
+public class WhiteList
+{
+    public string Tag;
 }
 
