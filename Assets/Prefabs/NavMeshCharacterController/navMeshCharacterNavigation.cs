@@ -24,12 +24,14 @@ public class navMeshCharacterNavigation : MonoBehaviour
     // navmesh Agent
     [Header("NavMesh Agent")]
     [Space(10)]
-    public NavMeshAgent agent;
+    public GameObject agentObject;
 
     //field for Chasing
     [Header("Chase Target")]
     [Space(10)]
+    public GameObject targetObject; 
     public WhiteList[] whiteList;
+    public float viewDistance;
 
     // fields for Attacking
     [Header("Attacking Fields")]
@@ -51,8 +53,8 @@ public class navMeshCharacterNavigation : MonoBehaviour
     // fields for StateMaterials
     [Header("State Materials")]
     [Space(10)]
-    [Tooltip("Agent Object is used to change state colour of Character")]
-    public GameObject agentObject; 
+    [Tooltip("used to change state colour of Character and raycast from, this object follows the rotation of the NavAgent")]
+    public GameObject Character; 
     [Space]
     public Material patrolling;
     public Material chasing;
@@ -61,23 +63,35 @@ public class navMeshCharacterNavigation : MonoBehaviour
     public Material retreating;
 
     // private fields
-    private GameObject targetObject;
     private STATE _state = STATE.PATROLLING;// enum for states / part of statemachine
+    private NavMeshAgent agent;
+    private RaycastHit hit;
+    private Ray ray;
+    //matcolours
     private Material stateDisplaying; // state of display / part of statemachine 
+    private Material charMat;
     // fields for Searching
     private Vector3 lastSeen; 
     private Vector3 lastBeen;
     private bool startSearchOnce = true;
     // fields for attacking
     private bool attackReadyTo;
-    
+
     [HideInInspector]
     public GameObject TargetObject { set { targetObject = value; } }
 
     void Start()
     {
+        //init agent
+        agent = agentObject.GetComponent<NavMeshAgent>();
+
+        //raycasting
+        ray.origin = agentObject.transform.position;
+        ray.direction = agentObject.transform.TransformDirection(Vector3.forward);
+
         //init colour of character
-        agentObject.GetComponent<MeshRenderer>().material = stateDisplaying;
+        charMat = Character.GetComponent<MeshRenderer>().material;
+        charMat = stateDisplaying;
 
         targetObject = GetComponentInChildren<GameObject>();
 
@@ -87,9 +101,12 @@ public class navMeshCharacterNavigation : MonoBehaviour
     }
     void Update()
     {
+
+        FaceTarget(agent.destination);
+
         Debug.Log("current state: "+_state); //check state                                      // DEBUG
-        agentObject.GetComponent<MeshRenderer>().material = stateDisplaying; //set colour
-        
+        charMat = stateDisplaying; //set colour
+
         // state Machine
         switch (_state)
         {
@@ -178,14 +195,36 @@ public class navMeshCharacterNavigation : MonoBehaviour
                 break;
         }
     }
+    private void FixedUpdate()
+    {
+        // v2 set state to Chasing
 
-    // set state to Chasing
-    private void OnTriggerEnter(Collider other)
+        ray.origin = agentObject.transform.position;
+        ray.direction = agentObject.transform.forward;
+
+        Debug.DrawRay(ray.origin, ray.direction, Color.red, .5f, false);             // DEBUG
+
+        if (Physics.Raycast(ray, out hit, viewDistance))
+        {
+            for (int i = 0; i < whiteList.Length; i++)
+            {
+                if (whiteList[i].Tag.Contains(hit.collider.tag))
+                {
+                    Debug.Log("Enemy looking at target");
+                    targetObject = hit.collider.gameObject;
+                    _state = STATE.CHASING;
+                }
+            }
+        }
+    }
+
+    /// set state to Chasing
+    /*private void OnTriggerEnter(Collider other)
     {
         for (int i = 0; i < whiteList.Length; i++)
-        { 
+        {
             if (whiteList[i].Tag.Contains(other.tag))
-            { 
+            {
                 targetObject = other.gameObject;
                 _state = STATE.CHASING;
             }
@@ -195,9 +234,9 @@ public class navMeshCharacterNavigation : MonoBehaviour
         {
             lastBeen = this.transform.position;
         }
-    }
+    }*/
 
-    // set state to Searching
+    // set state to Searching (dependant on Chase Trigger)
     private void OnTriggerExit(Collider other)
     {
         if (other.tag == targetObject.tag) // 
@@ -235,6 +274,13 @@ public class navMeshCharacterNavigation : MonoBehaviour
         {
             targetObject.GetComponent<navMeshCharacterNavigation>().TargetObject = this.gameObject;
         }
+    }
+    private void FaceTarget(Vector3 target)
+    {
+        Vector3 lookPos = target - agentObject.transform.position;  // set difference
+        lookPos.y = 0;                                              // remove Y
+        Quaternion rotation = Quaternion.LookRotation(lookPos);     // set rotation as difference
+        agentObject.transform.rotation = Quaternion.Slerp(transform.rotation, rotation, 0.50f);
     }
 
     IEnumerator GetReadyToAttack()

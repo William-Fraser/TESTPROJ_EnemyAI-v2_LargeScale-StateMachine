@@ -2220,9 +2220,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b02d32eca78e0764887295714f769330, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  agent: {fileID: 6171790481837957278}
+  agentObject: {fileID: 906761360912914535}
+  targetObject: {fileID: 5097464895512072096}
   whiteList:
   - Tag: Player
+  viewDistance: 5
   attackSpeed: 2.5
   attackDamage: 5
   patrolToStation: 1
@@ -2230,7 +2232,7 @@ MonoBehaviour:
   station2: {fileID: 929485847483141968}
   station3: {fileID: 8054412015234190352}
   station4: {fileID: 2839741576977342287}
-  agentObject: {fileID: 4806187426988102419}
+  Character: {fileID: 4806187426988102419}
   patrolling: {fileID: 2100000, guid: 2c799ef2f4ba98041ab0131d15560f0d, type: 2}
   chasing: {fileID: 2100000, guid: a137cdeefdde00246a2186c30a22724d, type: 2}
   searching: {fileID: 2100000, guid: c02ad31bc85ee604888920862e7afbbb, type: 2}
@@ -5865,7 +5867,7 @@ GameObject:
   - component: {fileID: 3423179212388416149}
   m_Layer: 0
   m_Name: DefaultTarget
-  m_TagString: Untagged
+  m_TagString: EditorOnly
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -5878,7 +5880,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 5097464895512072096}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 455.64, z: 0}
+  m_LocalPosition: {x: -5313, y: 455.64, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children: []
   m_Father: {fileID: 7470521829996841345}
