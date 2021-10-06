@@ -79,6 +79,8 @@ public class navMeshCharacterNavigation : MonoBehaviour
         //init colour of character
         agentObject.GetComponent<MeshRenderer>().material = stateDisplaying;
 
+        targetObject = GetComponentInChildren<GameObject>();
+
         //init searching values
         lastSeen = this.transform.position;
         lastBeen = this.transform.position;
@@ -223,7 +225,7 @@ public class navMeshCharacterNavigation : MonoBehaviour
 
     private void Attack()
     {
-        // reduce targets HP>? for now call aggrovate
+        // reduce targets HP>? for now call just call aggrovate
         Aggrovate();
     }
 
