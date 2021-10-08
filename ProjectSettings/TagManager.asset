@@ -8,6 +8,8 @@ TagManager:
   - PatrolStation
   - TeamRed
   - TeamBlu
+  - NGUI
+  - Enemy
   layers:
   - Default
   - TransparentFX

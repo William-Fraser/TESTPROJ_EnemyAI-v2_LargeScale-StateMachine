@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AI;
 using UnityStandardAssets.Characters.ThirdPerson;
+using UnityEngine.UI;
 
 public class navMeshCharacterNavigation : MonoBehaviour
 {
@@ -68,24 +69,26 @@ public class navMeshCharacterNavigation : MonoBehaviour
     //sound detection
     public detectSound soundDetect;
 
+    [Header("UI Display")]
+    public Text displayStateText;
+
     // private fields
     private STATE _state = STATE.PATROL;
     private NavMeshAgent agent;
     private RaycastHit hit;
     private Ray ray;
-    // matcolours
+    // Rendering
     private Renderer charRenderer;
-    // fields for Chasing
+    // Chasing
     private int targetPositionMemoryTime = 2; // amount of time until the target is lost
     private bool canRemember = false;
     private bool seesTarget = false;
-    // fields for Searching
+    // Searching
     private Vector3 lastSeen; 
     private Vector3 lastBeen;
     private bool startSearchOnce = true;
-    // fields for attacking
+    // attacking
     private bool attackReadyTo = true;
-
 
     [HideInInspector]
     public GameObject TargetObject { set { targetObject = value; } }
@@ -111,16 +114,33 @@ public class navMeshCharacterNavigation : MonoBehaviour
         targetObject = GetComponentInChildren<GameObject>();
         lastSeen = this.transform.position;
         lastBeen = this.transform.position;
-        GetComponentInChildren<detectSound>();    
-        
     }
     void Update()
     {
-        FaceTarget(agent.destination);
-
         SoundDetection();
 
-        //Debug.Log("current state: "+_state); //check state                                      // DEBUG
+        if (displayStateText != null)
+        {
+            switch (_state)
+            {
+                case STATE.PATROL:
+                    displayStateText.color = colours.patrol;
+                    break;
+                case STATE.CHASE:
+                    displayStateText.color = colours.chase;
+                    break;
+                case STATE.ATTACK:
+                    displayStateText.color = colours.attack;
+                    break;
+                case STATE.SEARCH:
+                    displayStateText.color = colours.search;
+                    break;
+                case STATE.RETURNING:
+                    displayStateText.color = colours.returning;
+                    break;
+            }
+            displayStateText.text = $"Current State: {_state}";
+        }
 
         // state Machine
         switch (_state)
@@ -130,6 +150,7 @@ public class navMeshCharacterNavigation : MonoBehaviour
                 // for the next Station Number
                 /// Station 4 sets destination to 1
                 charRenderer.material.color = colours.patrol;
+                
                 if (patrolToStation == 1)
                 {
                     agent.SetDestination(station1.transform.position);
@@ -164,9 +185,10 @@ public class navMeshCharacterNavigation : MonoBehaviour
                 }
                 break;
 
-            case STATE.CHASE:                                
+            case STATE.CHASE:
                 // targets chase object within the radius and follows them 
                 // until they get close enough to attack or lose object from radius
+                FaceTarget(agent.destination);
                 charRenderer.material.color = colours.chase;
                 agent.SetDestination(targetObject.transform.position);
                 break;
@@ -175,6 +197,7 @@ public class navMeshCharacterNavigation : MonoBehaviour
                 // moves character to last place chase object was seen and waits
                 charRenderer.material.color = colours.search;
                 agent.SetDestination(lastSeen);
+                
                 if (startSearchOnce)
                 {
                     startSearchOnce = false;
@@ -186,7 +209,7 @@ public class navMeshCharacterNavigation : MonoBehaviour
                 // not really handled yet since it can be coded to do multiple actions / stops from NavMesh
                 // the most common one would be to remove health from the player
                 /// if Character attacks chase object and removes health, Character should only attack chase object once
-                /// 
+                
                 if (attackReadyTo)
                 {
                     attackReadyTo = false;
@@ -223,11 +246,11 @@ public class navMeshCharacterNavigation : MonoBehaviour
             {
                 _state = STATE.ATTACK;
             }
-            else if (_state != STATE.RETURNING || _state != STATE.CHASE)
+            /*else if (_state != STATE.RETURNING || _state != STATE.CHASE && seesTarget)
             {
                 Debug.Log("Chase from attack");
                 _state = STATE.CHASE;
-            }
+            }*/
         }
     }
 
@@ -236,14 +259,19 @@ public class navMeshCharacterNavigation : MonoBehaviour
     {
         Aggrovate();
 
-        if (targetObject.GetComponent<ThirdPersonUserControl>().respawning == false)
+        if (targetObject.GetComponent<ThirdPersonUserControl>())
         {
-            seesTarget = true;
-            _state = STATE.RETURNING;
-            targetObject.GetComponent<ThirdPersonUserControl>().respawning = true; // stealth death 
-            agent.SetDestination(transform.position);
-            Debug.Log("kill player");
-            seesTarget = true;
+            if (targetObject.GetComponent<ThirdPersonUserControl>().respawning == false)
+            { 
+                targetObject.GetComponent<ThirdPersonUserControl>().respawning = true; // stealth death 
+                StopCoroutine("ChaseMemory");
+                seesTarget = false;
+                _state = STATE.RETURNING;
+                agent.SetDestination(transform.position);
+                Debug.Log("kill player");
+                seesTarget = true;
+                //_state = STATE.RETURNING;
+            }
         }
 
     }
@@ -267,32 +295,34 @@ public class navMeshCharacterNavigation : MonoBehaviour
         ray.origin = agentObject.transform.position + (Vector3.up*1.5f);
         ray.direction = agentObject.transform.forward;
 
-        float j = 6;
-        float l = .2f;
-        
-        for (float i = 1; i <= 12; i +=l) // start at 1 to avoid dividing by 0 ;p
+        float RayReduction = 6; // views off to the side should be shorter than that in the front
+        float castFrequency = .2f; // how often a ray is cast
+        float frequencyMultiplier = .1f;
+        for (float angle = 1; angle <= 12; angle +=castFrequency) // start at 1 to avoid dividing by 0 ;p
         {
-            if (j >= 1.2f) j -= l+l/l;
+            if (RayReduction >= 1.3f) RayReduction -= castFrequency+castFrequency/castFrequency; // ray reduction rate
             
-            l += .6f;
+            castFrequency += frequencyMultiplier;
+            frequencyMultiplier += .1f;
             Debug.DrawRay(ray.origin, ray.direction * viewDistance, Color.yellow, .05f, true);             // DEBUG
-            Debug.DrawRay(ray.origin, (ray.direction + (agentObject.transform.right / i)) * (viewDistance-j), Color.yellow, .05f, true);             // DEBUG
-            Debug.DrawRay(ray.origin, (ray.direction + ((agentObject.transform.right * -1) / i)) * (viewDistance -j), Color.yellow, .05f, true);
+            Debug.DrawRay(ray.origin, (ray.direction + (agentObject.transform.right / angle)) * (viewDistance-RayReduction), Color.yellow, .05f, true);             // DEBUG
+            Debug.DrawRay(ray.origin, (ray.direction + ((agentObject.transform.right * -1) / angle)) * (viewDistance -RayReduction), Color.yellow, .05f, true);
+            
             if (
             Physics.Raycast(ray, out hit, viewDistance) || // front cast
-            Physics.Raycast(ray.origin, ray.direction + (agentObject.transform.right / i), out hit, (viewDistance - j)) || // right cast
-            Physics.Raycast(ray.origin, ray.direction + ((agentObject.transform.right * -1) / i), out hit, (viewDistance-j)))// left cast 
+            Physics.Raycast(ray.origin, ray.direction + (agentObject.transform.right / angle), out hit, viewDistance) || // right cast
+            Physics.Raycast(ray.origin, ray.direction + ((agentObject.transform.right * -1) / angle), out hit, viewDistance))// left cast 
             {
+                
                 CheckRayCollison();
-                seesTarget = true;
             }
             else if (_state == STATE.CHASE)
             {
                 if (!canRemember)
                 {
                     seesTarget = false;
-                    Debug.LogWarning("target lost");
                     canRemember = true;
+                    Debug.LogWarning("target lost"+seesTarget);
                     StartCoroutine(ChaseMemory());
                 }
             }
@@ -306,10 +336,14 @@ public class navMeshCharacterNavigation : MonoBehaviour
             if (whiteList[i].Tag.Contains(hit.collider.tag))
             {
                 Debug.Log("target found");
+                seesTarget = true;
+                canRemember = false; // doesn't need to remember if target is visible
+
                 if (_state == STATE.PATROL) // then save potsition for return state
                 {
                     lastBeen = this.transform.position;
                 }
+
                 targetObject = hit.collider.gameObject;
                 _state = STATE.CHASE;
             }
@@ -317,14 +351,27 @@ public class navMeshCharacterNavigation : MonoBehaviour
     }
     private void SoundDetection()
     {
+        if (_state == STATE.CHASE || _state == STATE.ATTACK) return;
         if (soundDetect.objectDetected)
         {
             for (int i = 0; i < whiteList.Length; i++)
             {
                 if (whiteList[i].Tag.Contains(soundDetect.detectedObject.tag))
                 {
-                    lastSeen = targetObject.transform.position;
-                    _state = STATE.SEARCH;
+                    if (_state == STATE.PATROL) // then save potsition for return state
+                    {
+                        lastBeen = this.transform.position;
+                    }
+                    if (soundDetect.ranges.autoDetect.triggered)
+                    {
+                        targetObject = soundDetect.detectedObject;
+                        _state = STATE.ATTACK;
+                    }
+                    else 
+                    { 
+                        lastSeen = soundDetect.detectedObject.transform.position;
+                        _state = STATE.SEARCH;
+                    }
                 }
             }
         }
@@ -347,6 +394,7 @@ public class navMeshCharacterNavigation : MonoBehaviour
     // set state to Search / time Character can remember chase target to run after where they think they are (chases actual position)
     IEnumerator ChaseMemory()
     {
+        Debug.Log("chasing memeory of target");
         yield return new WaitForSeconds(targetPositionMemoryTime);
         canRemember = false;
         if (seesTarget) yield break;

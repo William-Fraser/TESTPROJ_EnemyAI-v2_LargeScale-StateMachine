@@ -2188,7 +2188,7 @@ GameObject:
   - component: {fileID: 2322788218540121093}
   m_Layer: 0
   m_Name: NavManager/DetectionRange
-  m_TagString: Untagged
+  m_TagString: Enemy
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -2240,6 +2240,7 @@ MonoBehaviour:
     search: {r: 0.078431375, g: 0.42352945, b: 0.6784314, a: 1}
     attack: {r: 0.6745098, g: 0.1254902, b: 0.1254902, a: 1}
     returning: {r: 0.6666667, g: 0.10980393, b: 0.6745098, a: 1}
+  soundDetect: {fileID: 0}
 --- !u!114 &3324945362626756891
 MonoBehaviour:
   m_ObjectHideFlags: 0
