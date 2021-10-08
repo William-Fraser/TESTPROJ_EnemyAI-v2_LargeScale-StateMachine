@@ -109,11 +109,6 @@ public class PlayerController : MonoBehaviour
         Debug.Log("saving spawn position");
         p_playerSpawn = this.transform.position;
     }
-    private void Respawn()
-    {
-        Debug.Log("respawn from fall");
-        r_respawning = true;
-    }
     private void Jump()
     {
         m_Rigidbody.AddForce(Vector3.up * _jumpHeight, ForceMode.Impulse);
@@ -175,6 +170,11 @@ public class PlayerController : MonoBehaviour
             Fall();
             ActivateKillBarrier();
         }
+    }
+    public void Respawn()
+    {
+        Debug.Log("respawn");
+        r_respawning = true;
     }
 
     //handles respawn animations

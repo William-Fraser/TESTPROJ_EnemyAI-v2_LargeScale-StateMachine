@@ -16,7 +16,8 @@ namespace UnityStandardAssets.Characters.ThirdPerson
 
         //fields for respawn
         private Image fog;
-        private bool respawning;
+        [HideInInspector]
+        public bool respawning;
         private bool respawnOnce;
         private Vector3 m_playerSpawn;
 
@@ -70,7 +71,7 @@ namespace UnityStandardAssets.Characters.ThirdPerson
             {
                 respawnOnce = true;
                 fog.CrossFadeAlpha(1, .5f, false);
-                Debug.Log("Run this Once");
+                Debug.LogWarning("Run this Once");
                 StartCoroutine("Respawn");
             }
         }
@@ -97,8 +98,10 @@ namespace UnityStandardAssets.Characters.ThirdPerson
                 m_Move = v*Vector3.forward + h*Vector3.right;
             }
 #if !MOBILE_INPUT
-			// walk speed multiplier
-	        if (Input.GetKey(KeyCode.LeftShift)) m_Move *= 0.5f;
+            // walk speed multiplier
+            if (Input.GetKey(KeyCode.LeftShift)) m_Move = m_Move;
+            else if (Input.GetKey(KeyCode.LeftControl)) m_Move *= 0.5f;
+            else m_Move *= .8f;
 #endif
 
             // pass all parameters to the character control script

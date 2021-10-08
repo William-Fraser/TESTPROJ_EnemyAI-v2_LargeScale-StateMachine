@@ -2,19 +2,21 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AI;
+using UnityStandardAssets.Characters.ThirdPerson;
 
 public class navMeshCharacterNavigation : MonoBehaviour
 {
     private enum STATE
     {
         IDLE,
-        PATROLLING, // to Chasing, from Returning  /                   (set up patrol in square fashion with obstacles between points)
-        CHASING,    // to Attacking or Searching, from Patrolling  /    (situational)
-        SEARCHING,  // to Chasing or Returning, from Chasing /         (situational)
-        ATTACKING,  // to Chasing, from Chasing /                       (used to stop/attack)
-        RETURNING,  // to Patrolling from Searching             
-        COWERING,
-        RETREATING
+        PATROL,     // to Chasing, from Returning  /                    (Patrols between set points) needs polish ;p
+        CHASE,      // to Attacking or Searching, from Patrolling  /    (attacks player)
+        SEARCH,     // to Chasing or Returning, from Chasing /          (searches for player in relative to last pos)
+        ATTACK,     // to Chasing, from Chasing /                       (used to stop/attack)
+        RETURNING,  // to Patrolling from Searching                     (returns to patrol)
+        COWER,      // to Retreat from ANY /                            (used to run away at low health)
+        RETREAT,    // to Idle or Spawning from Cower                   (retreats to home base or nearest health pool, if spawn timer is up will always retreat home)
+        SPAWN       // to Returning from Cower /                        (used to multiply enemy after either A[survived low health; below 25%] or B[Enough Time has passed and enemy feels the need to duplicate] option should be added to choose if effects take place)
     }
 
     //known bugs, chasing state activate but doesn't reset searching timer, works if mesh is chasing on time of coroutine end
@@ -29,20 +31,19 @@ public class navMeshCharacterNavigation : MonoBehaviour
     //field for Chasing
     [Header("Chase Target")]
     [Space(10)]
-    public GameObject targetObject; 
-    public WhiteList[] whiteList;
+    public GameObject targetObject;
     public float viewDistance;
+    public WhiteList[] whiteList;
 
     // fields for Attacking
-    [Header("Attacking Fields")]
+    [Header("Attacking Stats")]
     [Space(10)]
     public float attackSpeed = 2.5f;
     public float attackDamage = 5;
 
-    // fields for Patrol
     [Header("Patrolling Stations")]
     [Space(10)]
-    [Range(1 ,4)]
+    [Range(1, 4)]
     public int patrolToStation = 1; //set to 1 so the engineer can choose starting Station
     [Space]
     public GameObject station1;
@@ -50,71 +51,85 @@ public class navMeshCharacterNavigation : MonoBehaviour
     public GameObject station3;
     public GameObject station4;
 
+    [Header("Search Stats")]
+    public int searchingTime = 7;
+
     // fields for StateMaterials
-    [Header("State Materials")]
+    [Header("CharacterObject")]
     [Space(10)]
     [Tooltip("used to change state colour of Character and raycast from, this object follows the rotation of the NavAgent")]
-    public GameObject Character; 
+    public GameObject Character;
+    [Range(1, 10f)]
+    public float rotationSpeed = 1f;
     [Space]
-    public Material patrolling;
-    public Material chasing;
-    public Material searching;
-    public Material attacking;
-    public Material retreating;
+    public Colours colours;
+
+    [Header("Sound")]
+    //sound detection
+    public detectSound soundDetect;
 
     // private fields
-    private STATE _state = STATE.PATROLLING;// enum for states / part of statemachine
+    private STATE _state = STATE.PATROL;
     private NavMeshAgent agent;
     private RaycastHit hit;
     private Ray ray;
-    //matcolours
-    private Material stateDisplaying; // state of display / part of statemachine 
-    private Material charMat;
+    // matcolours
+    private Renderer charRenderer;
+    // fields for Chasing
+    private int targetPositionMemoryTime = 2; // amount of time until the target is lost
+    private bool canRemember = false;
+    private bool seesTarget = false;
     // fields for Searching
     private Vector3 lastSeen; 
     private Vector3 lastBeen;
     private bool startSearchOnce = true;
     // fields for attacking
-    private bool attackReadyTo;
+    private bool attackReadyTo = true;
+
 
     [HideInInspector]
     public GameObject TargetObject { set { targetObject = value; } }
 
     void Start()
     {
+
         //init agent
         agent = agentObject.GetComponent<NavMeshAgent>();
 
         //raycasting
         ray.origin = agentObject.transform.position;
-        ray.direction = agentObject.transform.TransformDirection(Vector3.forward);
+        ray.direction = agentObject.transform.TransformDirection(Vector3.back);
+
+        //char rotation
+        rotationSpeed /= 100;
 
         //init colour of character
-        charMat = Character.GetComponent<MeshRenderer>().material;
-        charMat = stateDisplaying;
-
-        targetObject = GetComponentInChildren<GameObject>();
+        charRenderer = Character.GetComponent<Renderer>();
+        //charMat.SetColor("_Color", stateDisplaying.color);
 
         //init searching values
+        targetObject = GetComponentInChildren<GameObject>();
         lastSeen = this.transform.position;
         lastBeen = this.transform.position;
+        GetComponentInChildren<detectSound>();    
+        
     }
     void Update()
     {
-
         FaceTarget(agent.destination);
 
-        Debug.Log("current state: "+_state); //check state                                      // DEBUG
-        charMat = stateDisplaying; //set colour
+        SoundDetection();
+
+        //Debug.Log("current state: "+_state); //check state                                      // DEBUG
 
         // state Machine
         switch (_state)
         {
-            case STATE.PATROLLING:
+            case STATE.PATROL:
                 // moves character to one Station then sets the destination 
                 // for the next Station Number
                 /// Station 4 sets destination to 1
-                stateDisplaying = patrolling;
+                charRenderer.material.color = colours.patrol;
                 if (patrolToStation == 1)
                 {
                     agent.SetDestination(station1.transform.position);
@@ -149,125 +164,89 @@ public class navMeshCharacterNavigation : MonoBehaviour
                 }
                 break;
 
-            case STATE.CHASING:                                
+            case STATE.CHASE:                                
                 // targets chase object within the radius and follows them 
                 // until they get close enough to attack or lose object from radius
-                stateDisplaying = chasing;
+                charRenderer.material.color = colours.chase;
                 agent.SetDestination(targetObject.transform.position);
                 break;
 
-            case STATE.SEARCHING:
+            case STATE.SEARCH:
                 // moves character to last place chase object was seen and waits
-                stateDisplaying = searching;
+                charRenderer.material.color = colours.search;
                 agent.SetDestination(lastSeen);
-                StartCoroutine(SearchTime());
-                if (Vector3.Distance(lastSeen, agent.transform.position) < 5)
+                if (startSearchOnce)
                 {
-                    if (startSearchOnce)
-                    {
-                        startSearchOnce = false;
-                    }
+                    startSearchOnce = false;
+                    StartCoroutine(SearchTime());
                 }
                 break;
                 
-            case STATE.ATTACKING:
+            case STATE.ATTACK:
                 // not really handled yet since it can be coded to do multiple actions / stops from NavMesh
                 // the most common one would be to remove health from the player
                 /// if Character attacks chase object and removes health, Character should only attack chase object once
+                /// 
                 if (attackReadyTo)
                 {
                     attackReadyTo = false;
                     StartCoroutine(GetReadyToAttack());
                     Attack();
                 }
-                stateDisplaying = attacking;
+                charRenderer.material.color = colours.attack;
                 break;
 
             case STATE.RETURNING:
                 // after Searching wait ends and Character returns to patrol path 
                 // at the last place it was patrolling
-                stateDisplaying = retreating;
+                charRenderer.material.color = colours.returning;
                 agent.SetDestination(lastBeen);
+                Debug.Log("returning");
+
                 if (Vector3.Distance(lastBeen, agent.transform.position) < 5)
                 {
-                    _state = STATE.PATROLLING;
+                    _state = STATE.PATROL;
                 }
                 break;
         }
     }
     private void FixedUpdate()
     {
-        // v2 set state to Chasing
-
-        ray.origin = agentObject.transform.position;
-        ray.direction = agentObject.transform.forward;
-
-        Debug.DrawRay(ray.origin, ray.direction, Color.red, .5f, false);             // DEBUG
-
-        if (Physics.Raycast(ray, out hit, viewDistance))
-        {
-            for (int i = 0; i < whiteList.Length; i++)
-            {
-                if (whiteList[i].Tag.Contains(hit.collider.tag))
-                {
-                    Debug.Log("Enemy looking at target");
-                    targetObject = hit.collider.gameObject;
-                    _state = STATE.CHASING;
-                }
-            }
-        }
+        CastView();
     }
-
-    /// set state to Chasing
-    /*private void OnTriggerEnter(Collider other)
-    {
-        for (int i = 0; i < whiteList.Length; i++)
-        {
-            if (whiteList[i].Tag.Contains(other.tag))
-            {
-                targetObject = other.gameObject;
-                _state = STATE.CHASING;
-            }
-        }
-
-        if (_state == STATE.PATROLLING) // then save potsition for return state
-        {
-            lastBeen = this.transform.position;
-        }
-    }*/
-
-    // set state to Searching (dependant on Chase Trigger)
-    private void OnTriggerExit(Collider other)
-    {
-        if (other.tag == targetObject.tag) // 
-        {
-            lastSeen = targetObject.transform.position;
-            _state = STATE.SEARCHING;
-        }
-    }
-
-    // set state to Attacking
+    // set state to Attacking              // probably still the way to do it for v2s
     private void OnTriggerStay(Collider other)
     {
         if (other.tag == targetObject.tag)
         {
             if (Vector3.Distance(targetObject.transform.position, agent.transform.position) < 3)
             {
-                _state = STATE.ATTACKING;
+                _state = STATE.ATTACK;
             }
-            else 
+            else if (_state != STATE.RETURNING || _state != STATE.CHASE)
             {
-                _state = STATE.CHASING;
+                Debug.Log("Chase from attack");
+                _state = STATE.CHASE;
             }
         }
     }
 
+    /// Private Methods
     private void Attack()
     {
-        // reduce targets HP>? for now call just call aggrovate
         Aggrovate();
-    }
 
+        if (targetObject.GetComponent<ThirdPersonUserControl>().respawning == false)
+        {
+            seesTarget = true;
+            _state = STATE.RETURNING;
+            targetObject.GetComponent<ThirdPersonUserControl>().respawning = true; // stealth death 
+            agent.SetDestination(transform.position);
+            Debug.Log("kill player");
+            seesTarget = true;
+        }
+
+    }
     private void Aggrovate()
     {
         if (targetObject.GetComponent<navMeshCharacterNavigation>())
@@ -280,27 +259,143 @@ public class navMeshCharacterNavigation : MonoBehaviour
         Vector3 lookPos = target - agentObject.transform.position;  // set difference
         lookPos.y = 0;                                              // remove Y
         Quaternion rotation = Quaternion.LookRotation(lookPos);     // set rotation as difference
-        agentObject.transform.rotation = Quaternion.Slerp(transform.rotation, rotation, 0.50f);
+        agentObject.transform.rotation = Quaternion.Slerp(transform.rotation, rotation, rotationSpeed); // Rotate the difference
+        //Debug.Log($"rotationSpeed: {rotationSpeed}");
+    }
+    private void CastView() // v2 set to Chasing
+    {
+        ray.origin = agentObject.transform.position + (Vector3.up*1.5f);
+        ray.direction = agentObject.transform.forward;
+
+        float j = 6;
+        float l = .2f;
+        
+        for (float i = 1; i <= 12; i +=l) // start at 1 to avoid dividing by 0 ;p
+        {
+            if (j >= 1.2f) j -= l+l/l;
+            
+            l += .6f;
+            Debug.DrawRay(ray.origin, ray.direction * viewDistance, Color.yellow, .05f, true);             // DEBUG
+            Debug.DrawRay(ray.origin, (ray.direction + (agentObject.transform.right / i)) * (viewDistance-j), Color.yellow, .05f, true);             // DEBUG
+            Debug.DrawRay(ray.origin, (ray.direction + ((agentObject.transform.right * -1) / i)) * (viewDistance -j), Color.yellow, .05f, true);
+            if (
+            Physics.Raycast(ray, out hit, viewDistance) || // front cast
+            Physics.Raycast(ray.origin, ray.direction + (agentObject.transform.right / i), out hit, (viewDistance - j)) || // right cast
+            Physics.Raycast(ray.origin, ray.direction + ((agentObject.transform.right * -1) / i), out hit, (viewDistance-j)))// left cast 
+            {
+                CheckRayCollison();
+                seesTarget = true;
+            }
+            else if (_state == STATE.CHASE)
+            {
+                if (!canRemember)
+                {
+                    seesTarget = false;
+                    Debug.LogWarning("target lost");
+                    canRemember = true;
+                    StartCoroutine(ChaseMemory());
+                }
+            }
+        }
+        
+    }
+    private void CheckRayCollison()
+    {
+        for (int i = 0; i < whiteList.Length; i++)
+        {
+            if (whiteList[i].Tag.Contains(hit.collider.tag))
+            {
+                Debug.Log("target found");
+                if (_state == STATE.PATROL) // then save potsition for return state
+                {
+                    lastBeen = this.transform.position;
+                }
+                targetObject = hit.collider.gameObject;
+                _state = STATE.CHASE;
+            }
+        }
+    }
+    private void SoundDetection()
+    {
+        if (soundDetect.objectDetected)
+        {
+            for (int i = 0; i < whiteList.Length; i++)
+            {
+                if (whiteList[i].Tag.Contains(soundDetect.detectedObject.tag))
+                {
+                    lastSeen = targetObject.transform.position;
+                    _state = STATE.SEARCH;
+                }
+            }
+        }
     }
 
+    #region Coroutines
     IEnumerator GetReadyToAttack()
     {
         yield return new WaitForSeconds(attackSpeed);
         attackReadyTo = true;
     }
-
     // set state to Return / time Character waits before Retreating
     IEnumerator SearchTime()
     {
-        yield return new WaitForSeconds(10);
-        if (_state == STATE.CHASING) yield break;
+        yield return new WaitForSeconds(searchingTime);
+        if (_state == STATE.CHASE) yield break;
         _state = STATE.RETURNING;
         startSearchOnce = true;
     }
+    // set state to Search / time Character can remember chase target to run after where they think they are (chases actual position)
+    IEnumerator ChaseMemory()
+    {
+        yield return new WaitForSeconds(targetPositionMemoryTime);
+        canRemember = false;
+        if (seesTarget) yield break;
+        lastSeen = targetObject.transform.position;
+        _state = STATE.SEARCH;
+    }
+    #endregion
+}
+[System.Serializable]
+public class Colours
+{
+    public Color patrol;
+    public Color chase;
+    public Color search;
+    public Color attack;
+    public Color returning;
 }
 [System.Serializable]
 public class WhiteList
 {
     public string Tag;
 }
+#region deprecated code
+/// set state to Chasing / deprecated
+/*private void OnTriggerEnter(Collider other)
+{
+    for (int i = 0; i < whiteList.Length; i++)
+    {
+        if (whiteList[i].Tag.Contains(other.tag))
+        {
+            targetObject = other.gameObject;
+            _state = STATE.CHASING;
+        }
+    }
 
+    if (_state == STATE.PATROLLING) // then save potsition for return state
+    {
+        lastBeen = this.transform.position;
+    }
+}*/
+
+/// set state to Searching (dependant on Chase Trigger) / deprecated
+/*private void OnTriggerExit(Collider other)
+{
+    if (other.tag == targetObject.tag) // 
+    {
+
+        _state = STATE.SEARCH;
+    }
+}*/
+
+#endregion
