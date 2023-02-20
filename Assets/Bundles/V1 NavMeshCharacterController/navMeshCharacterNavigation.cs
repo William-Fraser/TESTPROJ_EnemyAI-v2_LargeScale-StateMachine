@@ -196,10 +196,12 @@ public class navMeshCharacterNavigation : MonoBehaviour
                 break;
         }
     }
+
     private void FixedUpdate()
     {
         CastView();
     }
+
     // set state to Attacking              // probably still the way to do it for v2s
     private void OnTriggerStay(Collider other)
     {
@@ -209,11 +211,6 @@ public class navMeshCharacterNavigation : MonoBehaviour
             {
                 _state = STATE.ATTACK;
             }
-            /*else if (_state != STATE.RETURNING || _state != STATE.CHASE && seesTarget)
-            {
-                Debug.Log("Chase from attack");
-                _state = STATE.CHASE;
-            }*/
         }
     }
 
@@ -385,7 +382,8 @@ public class navMeshCharacterNavigation : MonoBehaviour
         {
             targetObject.GetComponent<navMeshCharacterNavigation>().TargetObject = this.gameObject;
         }
-    }
+    } 
+
     private void FaceTarget(Vector3 target)
     {
         Vector3 lookPos = target - agentObject.transform.position;  // set difference
@@ -394,6 +392,7 @@ public class navMeshCharacterNavigation : MonoBehaviour
         agentObject.transform.rotation = Quaternion.Slerp(transform.rotation, rotation, rotationSpeed); // Rotate the difference
         //Debug.Log($"rotationSpeed: {rotationSpeed}");
     }
+
     private void CastView() // v2 set to Chasing
     {
         ray.origin = agentObject.transform.position + (Vector3.up*1.5f);
