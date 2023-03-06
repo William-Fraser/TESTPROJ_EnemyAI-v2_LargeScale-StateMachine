@@ -1,9 +1,9 @@
-using System.Collections;
+using System;
 using System.Collections.Generic;
-using UnityEditor;
+using System.Linq;
+using System.Threading;
 using UnityEngine;
 using UnityEngine.AI;
-using static UnityEngine.GraphicsBuffer;
 
 public class NavMeshCharacterController : MonoBehaviour
 {
@@ -13,8 +13,7 @@ public class NavMeshCharacterController : MonoBehaviour
     /// idle and patrol are the base states, state patterns built off the base are more likely to activate
 
     ///extras
-    /// add idle time for patrol points
-    /// CustomEditor to hide unused behaviours
+    /// CustomEditor to hide unused behaviours traits
 
     private enum STATE
     {
@@ -22,12 +21,13 @@ public class NavMeshCharacterController : MonoBehaviour
         PATROL,
         ROAM,
         CHASE,
+        INTERACT
     }
 
     //variables
     [Header("Traits")] // !!! these are options set in the inspector, they determine what a character can do, // consider moving to a subclass for privacy
     [Tooltip("*Used in tandem with other traits. \nIdle's at Patrol points and during \nChase (if target is lost). ")][SerializeField] private bool idling;
-    [Tooltip("*Used in tandem with other traits. \nPatrol is Prioirty over Roam and \noverwrites as the default. ")][SerializeField] private bool patrolling;
+    [Tooltip("*Used in tandem with other traits. \nPatrol is a Priority State, you can \n use 1 point for a charater to return to a position ")][SerializeField] private bool patrolling;
     [Tooltip("*Used in tandem with other traits. \nRoam's during Chase instead of Idle \nto 'search' for target before 'losing interest'. ")][SerializeField] private bool roaming;
     [SerializeField] private bool chasing;
 
@@ -36,51 +36,69 @@ public class NavMeshCharacterController : MonoBehaviour
     [SerializeField] private List<GameObject> patrol_Points;
 
     [Header("Roam")]
-    private Vector3 roam_Target;
-    [Tooltip("Max roaming Distance")][SerializeField] private int roam_Distance = 5;
+    private GameObject roam_Target;
+    [Tooltip("Max roaming Distance")][SerializeField] private float roam_Distance = 5;
 
     [Header("Chase")]
     private List<GameObject> chase_Targets;
     private Vector3 chase_target;
     [Tooltip("Distance that character will chase targets at")][SerializeField]private float chase_distance = 5;
 
+    [Header("Interact")]
+    private GameObject interact_Target;
+
     [Header("Misc.")]
     private NavMeshAgent agent;
-    private STATE returnState;
-    [SerializeField] private float movementStopDistance = 1;
+    public Vector3 moveCheck;
+    private Dictionary<int, STATE> timedStates;
+    private STATE baseState;
+    [SerializeField] private float moveStopDistance = 1;
     [SerializeField] private STATE state;
 
     [Header("Timers")] // set up timer randomizer and range capabilities
-    private float secondaryStateTimer; // set from IdleTime variants : on time out idle changes to return state
     [SerializeField] private int patrol_IdleTime;
     [SerializeField] private int roam_IdleTime;
     [SerializeField] private int chase_IdleTime;
     [SerializeField] private int chase_RoamTime;
 
+
+    [Space(20)]
+    public float disvisualDEBUG;
+    [SerializeField] private STATE[] statevisualDEBUG;
+    public int[] timevisualDEBUG;
+
     public void Start()
     {
         //data checks
-        if (patrolling && patrol_Points.Count < 2) { Debug.LogError($"{gameObject.name} PATROLERROR: 2 or more patrol points needed"); patrolling = false; return; }
+        if (patrolling && patrol_Points.Count < 1) { Debug.LogError($"{gameObject.name} PATROLERROR: 1 or more patrol points needed"); patrolling = false; return; }
+        if (roam_Distance < moveStopDistance) { Debug.LogError($"{gameObject.name} ROAMERROR: distance is shorter than stopping distance"); return; }
         if (chasing && chase_Targets.Count < 1) { Debug.LogError($"{gameObject.name} CHASEERROR: 1 or more targets needed"); chasing = false; return; }
 
         //setup starting base state
-        if (roaming) { state = STATE.ROAM; }
-        if (patrolling) { state = STATE.PATROL; }
-        if (!roaming && !patrolling) { state = STATE.IDLE; idling = true; } // if nothing else idling will be true :)
+        if (idling) { state = STATE.IDLE; baseState = STATE.IDLE; }
+        if (roaming) { state = STATE.ROAM; baseState = STATE.ROAM; }
+        if (patrolling) { state = STATE.PATROL; baseState = STATE.PATROL; }
 
         agent = GetComponent<NavMeshAgent>();
         patrol_CurrentPoint = 0;
+        timedStates = new Dictionary<int, STATE>();
+        roam_Target = new GameObject("Roaming State Target");
+        roam_Target.transform.parent = this.transform.parent; // set parent to group parent
+        SetRoamTargetToClosestNavPos();
     }
 
     public void Update()
     {
+        //Debug.Log(Time.time);
+        statevisualDEBUG = timedStates.Values.ToArray();
+        timevisualDEBUG = timedStates.Keys.ToArray();
+        CheckTimedStates();
 
         switch (state)
         { 
-            case STATE.IDLE:
+            case STATE.IDLE: // this is the default see switch doc???
 
-                //returns to other state, see SetTimerSecondState();
-                if (secondaryStateTimer <= Time.time) ReturnFromSecondState();
+                //idle does nada
                 return;
 
             case STATE.PATROL:
@@ -89,31 +107,36 @@ public class NavMeshCharacterController : MonoBehaviour
                 Vector3 pointPos = patrol_Points[patrol_CurrentPoint].transform.position;
                 float distanceFromPoint = Vector3.Distance(pointPos, this.gameObject.transform.position);
 
-                //patrol methods
                 MoveTo(pointPos);
-
-                if (distanceFromPoint <= movementStopDistance)
+                // change patrol points and maybe idle
+                if (distanceFromPoint <= moveStopDistance)
                 {
                     ChangePatrolPoint();
                 
                     if (idling)
                     {
                         SetState(STATE.IDLE);
-                        SetTimerSecondState(patrol_IdleTime, STATE.PATROL);
+                        SetStateTimer(patrol_IdleTime, STATE.PATROL);
                     }
                 }
                 return;
 
-            case STATE.ROAM:
+            case STATE.ROAM: // might lag, then increase idle time with every entity, increasing the time added too maybe :)
 
-                RoamingMovement();
+                FindRoamingPos();
+                MoveTo(roam_Target.transform.position);
                 return;
 
             case STATE.CHASE:
 
-                //chase methods
                 MoveTo(chase_target);
                 TrackChaseTarget();
+                return;
+
+            case STATE.INTERACT:
+
+                MoveTo(interact_Target.transform.position);
+                InteractWith(interact_Target);
                 return;
         }
     }
@@ -121,10 +144,9 @@ public class NavMeshCharacterController : MonoBehaviour
     private void MoveTo(Vector3 pointPos)
     {
         //blocker statement
-        if (agent.destination == pointPos) return;
-
-        //move to active point
+        if (moveCheck == pointPos) return;
         agent.SetDestination(pointPos);
+        moveCheck = pointPos;
     }
 
     #region State Methods
@@ -135,34 +157,42 @@ public class NavMeshCharacterController : MonoBehaviour
 
         state = setState;
     }
-    private void SetTimerSecondState(int stateTimer, STATE returnTo) //used in multiple methods, set's a timer for a state with a new state to jump to after a timer
-    {
-        returnState = returnTo;
-        secondaryStateTimer = Time.time + stateTimer;
-    }
-    private void ReturnFromSecondState()
-    {
-        if (secondaryStateTimer == 0) return; // block timer from ending every second
-        secondaryStateTimer = 0; // stop timer
-        SetState(returnState); 
-    }
-    private STATE GetBaseState()
-    { 
-        STATE returnState;
-        
-        returnState = STATE.IDLE;
-        if (roaming) returnState = STATE.ROAM;
-        if (patrolling) returnState = STATE.PATROL; // patrolling is the top command if available
 
-        return returnState;
+    private void SetStateTimer(int timeTilTimeOut, STATE switchToOnTimeOut) //used in multiple methods, it's a timer that sets the state after a while, good for lots of things
+    {
+        int stateTimer = (int)Time.time + timeTilTimeOut;
+        timedStates.Add(stateTimer, switchToOnTimeOut);
     }
+
+    private void CheckTimedStates()
+    {
+        //returns to other state, see SetStateTimer();
+        //blocker statements
+        if (timedStates.Count == 0) return;
+        if (!timedStates.ContainsKey((int)Time.time)) return;
+
+        STATE newState = timedStates[(int)Time.time];
+
+        if (newState == baseState) timedStates.Clear(); // stop timers while at base state, timers can clear for different events like chasing
+
+        SetState(newState); 
+    }
+
+    private void SetBaseState(STATE newBaseState)
+    {
+        if (newBaseState == baseState) Debug.LogWarning($"{gameObject.name} WARNING: Base state was set to the same state");
+
+        baseState = newBaseState;
+    }
+
 
     //idle
-    public void Idle() // access Idle from controller scripts
+    public void Idle() // access Idle from behaviour scripts
     {
         if (!idling) { Debug.LogError($"{gameObject.name} is Idle when it is not an active trait"); return; }
         state = STATE.IDLE;
     }
+
 
     //patrol
     private void ChangePatrolPoint()
@@ -171,43 +201,62 @@ public class NavMeshCharacterController : MonoBehaviour
 
         if (patrol_CurrentPoint >= patrol_Points.Count) patrol_CurrentPoint = 0;
     }
-    public void Patrol() //access patrol from controller scripts
+    
+    public void Patrol() //access patrol from behaviour scripts
     {
         if (!patrolling) { Debug.LogError($"{gameObject.name} is Patrolling when it is not an active trait"); return; }
         state = STATE.PATROL;
     }
 
+
     //roam
-    private void RoamingMovement()
+    private void SetRoamTargetToClosestNavPos()
     {
         //initiate method objects
-        float distanceFromPoint = Vector3.Distance(roam_Target, this.gameObject.transform.position);
-        float roamX = Random.Range(0, roam_Distance);
+        float roamX = UnityEngine.Random.Range(-roam_Distance, roam_Distance);
         float roamY = gameObject.transform.position.y;
-        float roamZ = Random.Range(0, roam_Distance);
+        float roamZ = UnityEngine.Random.Range(-roam_Distance, roam_Distance);
         Vector3 newPos = new Vector3(roamX, roamY, roamZ);
-        NavMeshHit closestPos;
+        NavMeshHit hit;
+        
+        if (NavMesh.SamplePosition(newPos, out hit, roam_Distance, 1))
+            roam_Target.transform.position = hit.position;
+        
+        Debug.Log($"here1 {hit.position}");
+    } // finds a random position / sets it as the roam target
 
-        if (distanceFromPoint <= movementStopDistance)
+    private void FindRoamingPos()
+    {
+        float disFromTarget = Vector3.Distance(roam_Target.transform.position, this.gameObject.transform.position);
+        Debug.LogWarning("hit2");
+
+        disvisualDEBUG = disFromTarget;
+
+        //find close target if current is outside roam distance
+        if (disFromTarget > roam_Distance) 
+            SetRoamTargetToClosestNavPos();
+
+        //blocker statement
+        if (disFromTarget > moveStopDistance) return;
+
+        //maybe idle for a bit at each position
+        if (idling)
         {
-            //calculate random ground position near character and move there
-            NavMesh.SamplePosition(newPos, out closestPos, roam_Distance, NavMesh.AllAreas);
-            roam_Target = closestPos.position;
-            MoveTo(roam_Target);
-
-            //maybe idle for a bit at each position
-            if (idling)
-            {
-                SetTimerSecondState(roam_IdleTime, STATE.ROAM);
-                SetState(STATE.IDLE);
-            }
+            Debug.Log("hit3");
+            SetStateTimer(roam_IdleTime, STATE.ROAM);
+            SetState(STATE.IDLE);
         }
-    }    
-    public void Roam() // access Roam from controller scripts
+
+        //after reaching destination change position
+        SetRoamTargetToClosestNavPos();
+    }   // checks distance / SetRoamTargetToClosestNavPos / maybe idles
+    
+    public void Roam() // access Roam from behaviour scripts
     {
         if (!roaming) { Debug.LogError($"{gameObject.name} is Roaming when it is not an active trait"); return; }
         state = STATE.ROAM;
     }
+
 
     //chase
     private void TrackChaseTarget()
@@ -220,27 +269,41 @@ public class NavMeshCharacterController : MonoBehaviour
         
         Debug.Log($"{gameObject.name} let something get away");
 
-        //calc/start tracking method
+        //calc/start to look for target
         STATE trackingState = STATE.IDLE;
         if (roaming) trackingState = STATE.ROAM;
 
         switch (trackingState)
         { 
-            case STATE.IDLE: SetTimerSecondState(chase_IdleTime, GetBaseState()); SetState(STATE.IDLE); break;
-            case STATE.ROAM: SetTimerSecondState(chase_RoamTime, GetBaseState()); SetState(STATE.ROAM); break;
+            case STATE.IDLE: SetStateTimer(chase_IdleTime, baseState); SetState(STATE.IDLE); break;
+            case STATE.ROAM: SetStateTimer(chase_RoamTime, baseState); SetState(STATE.ROAM); break;
         }
     }
+
     public void Chase(GameObject gameObject) // used to start chasing from a Source
     {
         //blocker statement
         if (!chasing) { Debug.LogError($"{this.gameObject.name} is Chasing when it is not an active trait"); return; }
         
         Debug.Log($"{this.gameObject.name} is chasing {gameObject.name}");
-        
+
+        //stop state timers to prevent target loss
+        timedStates.Clear();
+
         //setup the chase
         chase_target = gameObject.transform.position;
         state = STATE.CHASE;
     }
+
+    //interact
+    private void FindInteractTargetNear(Vector3 Pos)
+    { 
+        //find interactable object within an area
+    }
+
+    public void InteractWith(GameObject gameObject)
+    { 
+        //if gameobject is a interactable / is within range / interact with it somehow
+    }
     #endregion
-    
 }

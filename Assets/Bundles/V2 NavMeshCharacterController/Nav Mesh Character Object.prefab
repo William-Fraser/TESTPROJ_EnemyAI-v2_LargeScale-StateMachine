@@ -27,13 +27,13 @@ Transform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2723918304230351599}
-  m_LocalRotation: {x: 1, y: 0, z: 0, w: 0}
+  m_LocalRotation: {x: 1, y: -0, z: -0, w: 0}
   m_LocalPosition: {x: 6.77, y: -2.89, z: 6.8}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 2723918305252475182}
-  m_RootOrder: 1
+  m_Father: {fileID: 2812507473841480982}
+  m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 180, y: 0, z: 0}
 --- !u!114 &2723918304230351595
 MonoBehaviour:
@@ -569,13 +569,13 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 2723918304254091833}
-  - component: {fileID: 2723918304254091832}
-  - component: {fileID: 2723918304254091839}
-  - component: {fileID: 2723918304254091838}
   - component: {fileID: 2723918304254091837}
   - component: {fileID: 2723918304254091834}
+  - component: {fileID: 2723918304254091832}
+  - component: {fileID: 2723918304254091839}
+  - component: {fileID: 4407080609749063877}
   m_Layer: 0
-  m_Name: NPC
+  m_Name: Nav Mesh Agent
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -596,6 +596,61 @@ Transform:
   m_Father: {fileID: 2723918305252475182}
   m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2723918304254091837
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2723918304254091836}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5bffef995eb02b74195a7216edfc8fb4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  idling: 1
+  patrolling: 0
+  roaming: 0
+  chasing: 0
+  patrol_Points:
+  - {fileID: 2723918304230351599}
+  - {fileID: 2723918304707257942}
+  - {fileID: 2723918306215861102}
+  - {fileID: 2723918306018389531}
+  roam_Distance: 5
+  chase_distance: 5
+  moveCheck: {x: 0, y: 0, z: 0}
+  moveStopDistance: 1
+  state: 0
+  patrol_IdleTime: 5
+  roam_IdleTime: 0
+  chase_IdleTime: 0
+  chase_RoamTime: 0
+  disvisualDEBUG: 0
+  statevisualDEBUG: 
+  timevisualDEBUG: 
+--- !u!195 &2723918304254091834
+NavMeshAgent:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2723918304254091836}
+  m_Enabled: 1
+  m_AgentTypeID: 0
+  m_Radius: 0.5
+  m_Speed: 3.5
+  m_Acceleration: 8
+  avoidancePriority: 50
+  m_AngularSpeed: 120
+  m_StoppingDistance: 0
+  m_AutoTraverseOffMeshLink: 1
+  m_AutoBraking: 1
+  m_AutoRepath: 1
+  m_Height: 1
+  m_BaseOffset: 0.5
+  m_WalkableMask: 4294967295
+  m_ObstacleAvoidanceType: 4
 --- !u!33 &2723918304254091832
 MeshFilter:
   m_ObjectHideFlags: 0
@@ -646,8 +701,8 @@ MeshRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_AdditionalVertexStreams: {fileID: 0}
---- !u!65 &2723918304254091838
-BoxCollider:
+--- !u!136 &4407080609749063877
+CapsuleCollider:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -656,54 +711,10 @@ BoxCollider:
   m_Material: {fileID: 0}
   m_IsTrigger: 0
   m_Enabled: 1
-  serializedVersion: 2
-  m_Size: {x: 1, y: 1, z: 1}
-  m_Center: {x: 0, y: 0, z: 0}
---- !u!114 &2723918304254091837
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2723918304254091836}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5bffef995eb02b74195a7216edfc8fb4, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  idling: 1
-  patroling: 1
-  chasing: 0
-  patrol_Points:
-  - {fileID: 2723918304230351599}
-  - {fileID: 2723918304707257942}
-  - {fileID: 2723918306215861102}
-  - {fileID: 2723918306018389531}
-  patrol_StopDistance: 1
-  state: 0
-  patrol_IdleTime: 5
---- !u!195 &2723918304254091834
-NavMeshAgent:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2723918304254091836}
-  m_Enabled: 1
-  m_AgentTypeID: 0
   m_Radius: 0.5
-  m_Speed: 3.5
-  m_Acceleration: 8
-  avoidancePriority: 50
-  m_AngularSpeed: 120
-  m_StoppingDistance: 0
-  m_AutoTraverseOffMeshLink: 1
-  m_AutoBraking: 1
-  m_AutoRepath: 1
   m_Height: 1
-  m_BaseOffset: 0.5
-  m_WalkableMask: 4294967295
-  m_ObstacleAvoidanceType: 4
+  m_Direction: 1
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &2723918304707257942
 GameObject:
   m_ObjectHideFlags: 0
@@ -731,13 +742,13 @@ Transform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2723918304707257942}
-  m_LocalRotation: {x: 1, y: 0, z: 0, w: 0}
+  m_LocalRotation: {x: 1, y: -0, z: -0, w: 0}
   m_LocalPosition: {x: -8.93, y: -2.89, z: 4.8}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 2723918305252475182}
-  m_RootOrder: 2
+  m_Father: {fileID: 2812507473841480982}
+  m_RootOrder: 1
   m_LocalEulerAnglesHint: {x: 180, y: 0, z: 0}
 --- !u!114 &2723918304707257939
 MonoBehaviour:
@@ -1274,7 +1285,7 @@ GameObject:
   m_Component:
   - component: {fileID: 2723918305252475182}
   m_Layer: 0
-  m_Name: Controlled Object X 1
+  m_Name: Nav Mesh Character Object
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1293,10 +1304,7 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 2723918304254091833}
-  - {fileID: 2723918304230351588}
-  - {fileID: 2723918304707257943}
-  - {fileID: 2723918306215861103}
-  - {fileID: 2723918306018389524}
+  - {fileID: 2812507473841480982}
   m_Father: {fileID: 0}
   m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -1327,13 +1335,13 @@ Transform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2723918306018389531}
-  m_LocalRotation: {x: 1, y: 0, z: 0, w: 0}
+  m_LocalRotation: {x: 1, y: -0, z: -0, w: 0}
   m_LocalPosition: {x: -2.99, y: -2.89, z: -5.71}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 2723918305252475182}
-  m_RootOrder: 4
+  m_Father: {fileID: 2812507473841480982}
+  m_RootOrder: 3
   m_LocalEulerAnglesHint: {x: 180, y: 0, z: 0}
 --- !u!114 &2723918306018389520
 MonoBehaviour:
@@ -1887,13 +1895,13 @@ Transform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2723918306215861102}
-  m_LocalRotation: {x: 1, y: 0, z: 0, w: 0}
+  m_LocalRotation: {x: 1, y: -0, z: -0, w: 0}
   m_LocalPosition: {x: 3.96, y: -2.89, z: -4.56}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 2723918305252475182}
-  m_RootOrder: 3
+  m_Father: {fileID: 2812507473841480982}
+  m_RootOrder: 2
   m_LocalEulerAnglesHint: {x: 180, y: 0, z: 0}
 --- !u!114 &2723918306215861099
 MonoBehaviour:
@@ -2420,3 +2428,38 @@ MeshCollider:
   m_Convex: 0
   m_CookingOptions: 30
   m_Mesh: {fileID: 0}
+--- !u!1 &3794995054181029397
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2812507473841480982}
+  m_Layer: 0
+  m_Name: PatrolPoints
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &2812507473841480982
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3794995054181029397}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 2723918304230351588}
+  - {fileID: 2723918304707257943}
+  - {fileID: 2723918306215861103}
+  - {fileID: 2723918306018389524}
+  m_Father: {fileID: 2723918305252475182}
+  m_RootOrder: 1
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
